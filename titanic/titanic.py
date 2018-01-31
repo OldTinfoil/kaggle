@@ -1,8 +1,16 @@
 import pandas
 import os
+import matplotlib.pyplot as plt
+import seaborn
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
 from utils.filestuff import source_path
+from sklearn.svm import SVC
 
 pandas.set_option('display.width', 1000)
+
+CROSS_VALIDATION_SPLITS = 100
+CROSS_VALIDATION_TEST_SIZE = 0.1
 
 
 def age_categorisation(df):
@@ -21,7 +29,7 @@ def age_categorisation(df):
     df['Age_Midlife'] = [1 if 40 <= age < 60 else 0 for age in df['Age']]
     df['Age_Senior'] = [1 if 60 <= age < 1000 else 0 for age in df['Age']]
     df['Age_Unknown'] = [0 if age is None or 0 <= age < 1000 else 1 for age in df['Age']]
-    df.drop(['Age'], 1)
+    df.drop(['Age'], axis=1)
     return df
 
 
@@ -37,105 +45,57 @@ def port_categorisation(df):
 
 def sex_categorisation(df):
     # Sex
-    df['Sex_Male'] = [1 if sex == "male" else 0 for sex in training_df['Sex']]
-    df['Sex_Female'] = [1 if sex == "female" else 0 for sex in training_df['Sex']]
+    df['Sex_Male'] = [1 if sex == "male" else 0 for sex in df['Sex']]
+    df['Sex_Female'] = [1 if sex == "female" else 0 for sex in df['Sex']]
     # No unknown genders on record
     df = df.drop(['Sex'], axis=1)
     return df
 
 
-def pre_process_data(df):
+def pre_processing(df):
     # Let's perform dummy encoding for our categorical data
-    df = age_categorisation(df)
-    df = port_categorisation(df)
+    # df = age_categorisation(df)
+    # df = port_categorisation(df)
     df = sex_categorisation(df)
 
-    # drop unused metrics (for now at least
-
+    # drop unused metrics (for now at least)
+    df = df.drop(['PassengerId', 'Pclass', 'Name', 'Age', 'SibSp', 'Parch', 'Ticket', 'Fare', 'Cabin', 'Embarked'],
+                 axis=1)
     return df
 
 
-if __name__ == "__main__":
+def main():
     doc_path = os.path.join(source_path(__file__), "doc")
     training_data_file = os.path.join(doc_path, "train.csv")
     training_df = pandas.read_csv(training_data_file)
 
-    print(training_df.columns.values)
-    # print(training_data.describe())
-    # print(training_data.describe(include=['O']))
+    test_data_file = os.path.join(doc_path, "test.csv")
+    test_df = pandas.read_csv(test_data_file)
 
-    training_df = pre_process_data(training_df)
+    training_df = pre_processing(training_df)
+    test_df = pre_processing(test_df)
 
-    print(training_df.describe())
+    # TODO - stratified cross validation to go here ...
+    # TODO - ... followed by a proper pipelining
 
-    print(training_df[['Age_Infant', 'Survived']].groupby(['Age_Infant'], as_index=False).mean().sort_values(
-        by='Survived',
-        ascending=False))
+    training_features, \
+    validation_features, \
+    training_survival, \
+    validation_survival = train_test_split(training_df.drop(['Survived'], axis=1),
+                                           training_df.Survived,
+                                           test_size=CROSS_VALIDATION_TEST_SIZE)
 
-    print(training_df[['Age_Toddler', 'Survived']].groupby(['Age_Toddler'], as_index=False).mean().sort_values(
-        by='Survived',
-        ascending=False))
+    '''print(training_features)
+    print(validation_features)
+    print(training_survival)
+    print(validation_survival)'''
 
-    print(training_df[['Age_Preschooler', 'Survived']].groupby(['Age_Preschooler'], as_index=False).mean().sort_values(
-        by='Survived',
-        ascending=False))
+    linear_svm_classifier = SVC(kernel='linear').fit(training_features, training_survival)
+    linear_svm_classifier_predictions = linear_svm_classifier.predict(validation_features)
+    print(linear_svm_classifier.score(training_features, training_survival),
+          linear_svm_classifier.score(validation_features, validation_survival))
 
-    print(
-        training_df[['Age_Child', 'Survived']].groupby(['Age_Child'], as_index=False).mean().sort_values(by='Survived',
-                                                                                                         ascending=False))
+    return linear_svm_classifier.score(validation_features, validation_survival)
 
-    print(training_df[['Age_Preteen', 'Survived']].groupby(['Age_Preteen'], as_index=False).mean().sort_values(
-        by='Survived',
-        ascending=False))
-
-    print(training_df[['Age_Teenager', 'Survived']].groupby(['Age_Teenager'], as_index=False).mean().sort_values(
-        by='Survived',
-        ascending=False))
-
-    print(
-        training_df[['Age_Adult', 'Survived']].groupby(['Age_Adult'], as_index=False).mean().sort_values(by='Survived',
-                                                                                                         ascending=False))
-
-    print(training_df[['Age_Midlife', 'Survived']].groupby(['Age_Midlife'], as_index=False).mean().sort_values(
-        by='Survived',
-        ascending=False))
-
-    print(training_df[['Age_Senior', 'Survived']].groupby(['Age_Senior'], as_index=False).mean().sort_values(
-        by='Survived',
-        ascending=False))
-
-    print(training_df[['Age_Unknown', 'Survived']].groupby(['Age_Unknown'], as_index=False).mean().sort_values(
-        by='Survived',
-        ascending=False))
-
-    print(training_df[['Age_Unknown', 'Survived']]).mean().sort_values(by='Survived', ascending=False)
-
-    '''print(training_df.head())
-    print(training_df.tail())
-
-    print(training_df[['Port_Cherbourg', 'Survived']].groupby(['Port_Cherbourg'],
-                                                              as_index=False).mean().sort_values(by='Survived',
-                                                                                                 ascending=False))
-
-    print(training_df[['Port_Queenstown', 'Survived']].groupby(['Port_Queenstown'],
-                                                               as_index=False).mean().sort_values(by='Survived',
-                                                                                                 ascending=False))
-
-    print(training_df[['Port_Southampton', 'Survived']].groupby(['Port_Southampton'],
-                                                                as_index=False).mean().sort_values(by='Survived',
-                                                                                                 ascending=False))
-
-    print(training_df[['Port_Unknown', 'Survived']].groupby(['Port_Unknown'],
-                                                            as_index=False).mean().sort_values(by='Survived',
-                                                                                                 ascending=False))
-
-    print(training_df[['Sex_Male', 'Survived']].groupby(['Sex_Male'],
-                                                        as_index=False).mean().sort_values(by='Survived',
-                                                                                                 ascending=False))
-
-    print(training_df[['Sex_Female', 'Survived']].groupby(['Sex_Female'],
-                                                          as_index=False).mean().sort_values(by='Survived',
-                                                                                                 ascending=False))
-
-    print(training_df[['Embarked', 'Survived']].groupby(['Embarked'], as_index=False).mean().sort_values(by='Survived',
-                                                                                                         ascending=False))'''
+if __name__ == "__main__":
+    main()
