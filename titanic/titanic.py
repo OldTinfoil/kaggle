@@ -5,6 +5,8 @@ import json
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 from sklearn.svm import SVC
+import matplotlib.pyplot as plt
+import seaborn
 from utils.filestuff import source_path
 
 # ie - human readable version of: wot Mark tried today
@@ -24,6 +26,9 @@ submission_path = os.path.join(source_path(__file__), "submissions")
 
 
 class ClassifierAnalysis:
+    """
+    Handy storage class
+    """
     def __init__(self, classifier, flavour, accuracy, precision, recall, f1, average_accuracy, average_prediction,
                  average_recall, average_f1, note=""):
         self.classifier = classifier
@@ -42,8 +47,31 @@ class ClassifierAnalysis:
         return str(type(self.classifier)) + "----" + self.flavour
 
 
+def plot_correlation_map(df):
+    """
+    Shows grid of correlations.
+    lifted from https://www.kaggle.com/helgejo/an-interactive-data-science-tutorial
+    """
+    corr = df.corr()
+    fig, ax = plt.subplots(figsize=(12, 10))
+    fig.set_size_inches(17, 17)
+    cmap = seaborn.diverging_palette(220, 10, as_cmap=True)
+    _ = seaborn.heatmap(
+        corr,
+        cmap=cmap,
+        square=True,
+        cbar_kws={'shrink': .9},
+        ax=ax,
+        annot=True,
+        annot_kws={'fontsize': 12}
+    )
+
+
 def age_categorisation(df):
     """
+    Looks like the age data isn't overly reliable. Will assume that people recording age will have been able to
+    differentiate between babies and people in midlife crisis.
+
     Sourced from https://en.wikipedia.org/wiki/Human_development_(biology)
     :return:
     """
@@ -82,10 +110,12 @@ def sex_categorisation(df):
 
 
 def pre_processing(df):
-    # Let's perform dummy encoding for our categorical data
+    # Dummy encoding
     df = age_categorisation(df)
     df = port_categorisation(df)
     df = sex_categorisation(df)
+
+    # Will definitely need to look into class next
 
     # drop unused metrics (for now at least)
     df = df.drop(['PassengerId', 'Pclass', 'Name', 'SibSp', 'Parch', 'Ticket', 'Fare', 'Cabin'], axis=1)
@@ -103,9 +133,21 @@ def train():
     '''with pandas.option_context('display.max_rows', None):
         print(training_df)'''
 
+    plot_correlation_map(training_df)
+    plt.show()
+
     # TODO - stratified cross validation to go here ...
     # TODO - ... followed by a proper pipelining
 
+    '''
+    For each classifier (currently, just different boundary mechanisms for svms):
+     * shuffle through 1000 train/validation splits
+     * find the best candidate for that classifier
+     * keep a note of how well the type of classifier performed by averaging the scores of the shuffles
+     * currently only using f1 for our scoring mechanism because false positive / false negative weightings are equally
+       as bad
+    * Finally, pick the best classifier and use it.
+    '''
     for kernel in SVM_KERNELS:
         best_classifier_candidate = ClassifierAnalysis(None, "Bland", 0, 0, 0, 0, 0, 0, 0, 0)
         for _ in range(0, SHUFFLES):
@@ -149,6 +191,7 @@ def train():
 
         classifiers.append(best_classifier_candidate)
 
+    # Print out summary data, find the best of the candidates
     print("Kernel", "f1")
     print(classifiers[0].get_description(), classifiers[0].f1)
     best_svm_classifier = classifiers[0]
@@ -157,10 +200,14 @@ def train():
         if classifier.f1 > best_svm_classifier.f1:
             best_svm_classifier = classifier
 
+    # Probably overfitted by this point
     return best_svm_classifier
 
 
 def evaluate(classifier, basename):
+    """
+    Run the classifier against the test data and write the results to the submissions folder
+    """
     test_data_file = os.path.join(doc_path, "test.csv")
     test_df = pandas.read_csv(test_data_file)
     processed_df = pre_processing(test_df)
@@ -175,6 +222,9 @@ def evaluate(classifier, basename):
 
 
 def store_classifier(classifier, basename):
+    """
+    Store a pickled classifier and a json summary to remind me which submission was which
+    """
     with open(os.path.join(submission_path, ".".join([basename, "classifier"])), 'wb') as f:
         pickle.dump(classifier.classifier, f)
 
@@ -195,6 +245,10 @@ def store_classifier(classifier, basename):
 
 
 def get_newest_submission_number():
+    """
+    Automagically detect the the current submission number by looking for a list of the .final files and finding the
+    highest submission #
+    """
     max_id = -1
     for f in os.listdir(submission_path):
         filename, extension = os.path.splitext(os.path.basename(f))
@@ -207,9 +261,6 @@ def get_newest_submission_number():
 
 if __name__ == "__main__":
     storage_basename = get_newest_submission_number()
-
     best_classifier = train()
-
     evaluate(best_classifier.classifier, storage_basename)
-
     store_classifier(best_classifier, storage_basename)
