@@ -29,6 +29,7 @@ class ClassifierAnalysis:
     """
     Handy storage class
     """
+
     def __init__(self, classifier, flavour, accuracy, precision, recall, f1, average_accuracy, average_prediction,
                  average_recall, average_f1, note=""):
         self.classifier = classifier
@@ -56,15 +57,13 @@ def plot_correlation_map(df):
     fig, ax = plt.subplots(figsize=(12, 10))
     fig.set_size_inches(17, 17)
     cmap = seaborn.diverging_palette(220, 10, as_cmap=True)
-    _ = seaborn.heatmap(
-        corr,
-        cmap=cmap,
-        square=True,
-        cbar_kws={'shrink': .9},
-        ax=ax,
-        annot=True,
-        annot_kws={'fontsize': 12}
-    )
+    _ = seaborn.heatmap(corr,
+                        cmap=cmap,
+                        square=True,
+                        cbar_kws={'shrink': .9},
+                        ax=ax,
+                        annot=True,
+                        annot_kws={'fontsize': 12})
 
 
 def age_categorisation(df):
