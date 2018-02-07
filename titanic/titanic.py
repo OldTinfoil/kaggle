@@ -1,5 +1,6 @@
 import pandas
 import os
+import pickle
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 from sklearn.svm import SVC
@@ -11,10 +12,27 @@ pandas.set_option('display.width', 1000)
 CROSS_VALIDATION_SPLITS = 100
 CROSS_VALIDATION_TEST_SIZE = 0.1
 
-SHUFFLES = 100
+SHUFFLES = 1000
+
+SVM_KERNELS = ['linear', 'polynomial', 'rbf', 'sigmoid']
 
 doc_path = os.path.join(source_path(__file__), "doc")
 submission_path = os.path.join(source_path(__file__), "submissions")
+
+
+class ClassifierAnalysis:
+    def __init__(self, classifier, accuracy, precision, recall, f1, average_accuracy, average_prediction,
+                 average_recall, average_f1, note=""):
+        self.classifier = classifier
+        self.accuracy = accuracy
+        self.precision = precision
+        self.recall = recall
+        self.f1 = f1
+        self.average_accuracy = average_accuracy
+        self.average_prediction = average_prediction
+        self.average_recall = average_recall
+        self.average_f1 = average_f1
+        self.note = note
 
 
 def age_categorisation(df):
@@ -69,11 +87,7 @@ def pre_processing(df):
 
 
 def train():
-    best_classifier = EmptyObject()
-    best_classifier.f1 = 0
-    best_classifier.precision = 0
-    best_classifier.recall = 0
-    best_classifier.accuracy = 0
+    classifiers = []
 
     precision_sum = recall_sum = accuracy_sum = f1_sum = 0
 
@@ -83,71 +97,93 @@ def train():
     # TODO - stratified cross validation to go here ...
     # TODO - ... followed by a proper pipelining
 
-    for _ in range(0,SHUFFLES):
-        x_training, \
-        x_validation, \
-        y_training, \
-        y_validation = train_test_split(training_df.drop(['Survived'], axis=1),
-                                        training_df.Survived,
-                                        test_size=CROSS_VALIDATION_TEST_SIZE)
+    for kernel in SVM_KERNELS:
+        best_classifier_candidate = ClassifierAnalysis(None, 0, 0, 0, 0, 0, 0, 0, 0)
+        for _ in range(0, SHUFFLES):
+            x_training, x_validation, y_training, y_validation = train_test_split(training_df.drop(['Survived'],
+                                                                                                   axis=1),
+                                                                                  training_df.Survived,
+                                                                                  test_size=CROSS_VALIDATION_TEST_SIZE)
 
-        '''print(training_features)
-        print(validation_features)
-        print(training_survival)
-        print(validation_survival)'''
+            linear_svm_classifier = SVC(kernel='linear').fit(x_training, y_training)
+            linear_svm_classifier_predictions = linear_svm_classifier.predict(x_validation)
+            '''print(linear_svm_classifier.score(training_features, training_survival),
+                  linear_svm_classifier.score(validation_features, validation_survival))'''
 
-        linear_svm_classifier = SVC(kernel='linear').fit(x_training, y_training)
-        linear_svm_classifier_predictions = linear_svm_classifier.predict(x_validation)
-        '''print(linear_svm_classifier.score(training_features, training_survival),
-              linear_svm_classifier.score(validation_features, validation_survival))'''
+            precision = precision_score(y_validation, linear_svm_classifier_predictions)
+            recall = recall_score(y_validation, linear_svm_classifier_predictions)
+            accuracy = accuracy_score(y_validation, linear_svm_classifier_predictions)
+            f1 = f1_score(y_validation, linear_svm_classifier_predictions)
 
-        precision = precision_score(y_validation, linear_svm_classifier_predictions)
-        recall = recall_score(y_validation, linear_svm_classifier_predictions)
-        accuracy = accuracy_score(y_validation, linear_svm_classifier_predictions)
-        f1 = f1_score(y_validation, linear_svm_classifier_predictions)
+            # No penalty in false positives or false negatives in our data set, so just use f1 as our indicating metric
 
-        # No penalty in false positives or false negatives in our data set, so just use f1 as our indicating metric
+            precision_sum += precision
+            recall_sum += recall
+            accuracy_sum += accuracy
+            f1_sum += f1
 
-        precision_sum += precision
-        recall_sum += recall
-        accuracy_sum += accuracy
-        f1_sum += f1
+            if best_classifier_candidate.f1 < f1:
+                best_classifier_candidate = ClassifierAnalysis(linear_svm_classifier, accuracy, precision, recall, f1, 0, 0, 0, 0)
 
-        if best_classifier.f1 < f1:
-            best_classifier = linear_svm_classifier
-            best_classifier.f1 = f1
-            best_classifier.precision = precision
-            best_classifier.recall = recall
-            best_classifier.accuracy = accuracy
+        f1_avg = f1_sum / SHUFFLES
+        precision_avg = precision_sum / SHUFFLES
+        recall_avg = recall_sum / SHUFFLES
+        accuracy_avg = accuracy_sum / SHUFFLES
 
-    f1_avg = f1_sum/SHUFFLES
-    precision_avg = precision_sum / SHUFFLES
-    recall_avg = recall_sum / SHUFFLES
-    accuracy_avg = accuracy_sum / SHUFFLES
+        best_classifier_candidate.average_accuracy = accuracy_avg
+        best_classifier_candidate.average_precision = precision_avg
+        best_classifier_candidate.average_recall = recall_avg
+        best_classifier_candidate.average_f1 = f1_avg
+        best_classifier_candidate.note = kernel
 
-    return best_classifier, accuracy_avg, precision_avg, recall_avg, f1_avg
+        classifiers.append(best_classifier_candidate)
+
+    print("Kernel", "f1")
+    print(classifiers[0].note, classifiers[0].f1)
+    best_svm_classifier = classifiers[0]
+    for classifier in classifiers[1:]:
+        print(classifier.note, classifier.f1)
+        if classifier.f1 > best_svm_classifier.f1:
+            best_svm_classifier = classifier
+
+    return best_svm_classifier
 
 
-def evaluate(classifier):
+def evaluate(classifier, basename):
     test_data_file = os.path.join(doc_path, "test.csv")
     test_df = pandas.read_csv(test_data_file)
     processed_df = pre_processing(test_df)
 
     predictions = classifier.predict(processed_df)
-    #print(predictions)
+    # print(predictions)
 
-    with open(os.path.join(submission_path, "submit002.csv"), 'w') as f:
+    with open(os.path.join(submission_path, ".".join([basename, "csv"])), 'w') as f:
         f.write("PassengerId,Survived\n")
         for i in range(0, len(predictions)):
             f.write("{0},{1}\n".format(test_df[['PassengerId']].values[i][0], predictions[i]))
 
 
-if __name__ == "__main__":
-    best_classifier, accuracy, precision, recall, f1 = train()
-    print("Metric", "Avg", "Best")
-    print("Precision", precision, best_classifier.precision)
-    print("Recall", recall, best_classifier.recall)
-    print("Accuracy", accuracy, best_classifier.accuracy)
-    print("f1", f1, best_classifier.f1)
+def store_classifier(classifier, basename):
+    with open(os.path.join(submission_path, ".".join([basename, "classifier"])), 'wb') as f:
+        pickle.dump(classifier, f)
 
-    evaluate(best_classifier)
+
+def get_newest_submission_number():
+    max_id = -1
+    for f in os.listdir(submission_path):
+        filename, extension = os.path.splitext(os.path.basename(f))
+        if extension == ".final" and int(filename.split("_")[1]) > max_id:
+            max_id = int(filename.split("_")[1])
+
+    max_id = max_id + 1 if max_id != 0 else 1
+    return "submit_{0}".format(max_id)
+
+
+if __name__ == "__main__":
+    storage_basename = get_newest_submission_number()
+
+    best_classifier = train()
+
+    evaluate(best_classifier.classifier, storage_basename)
+
+    store_classifier(best_classifier.classifier, storage_basename)
