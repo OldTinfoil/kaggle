@@ -8,6 +8,7 @@ from sklearn.svm import SVC
 import matplotlib.pyplot as plt
 import seaborn
 from utils.filestuff import source_path
+from utils.misc import get_newest_submission_number
 
 # ie - human readable version of: wot Mark tried today
 NOTE = "Dummy encoded sex/port/category-age classifier with unknowns allowed"
@@ -99,6 +100,16 @@ def port_categorisation(df):
     return df
 
 
+def port_categorisation(df):
+    # Embarkation port
+    df['Class_First'] = [1 if pclass == 1 else 0 for pclass in df['Pclass']]
+    df['Class_Second'] = [1 if pclass == 2 else 0 for pclass in df['Pclass']]
+    df['Class_Third'] = [1 if pclass == 3 else 0 for pclass in df['Pclass']]
+    df['Class_Unknown'] = [1 if pclass < 1 or pclass > 3 else 0 for pclass in df['Pclass']]
+    df = df.drop(['Pclass'], axis=1)
+    return df
+
+
 def sex_categorisation(df):
     # Sex
     df['Sex_Male'] = [1 if sex == "male" else 0 for sex in df['Sex']]
@@ -117,8 +128,20 @@ def pre_processing(df):
     # Will definitely need to look into class next
 
     # drop unused metrics (for now at least)
-    df = df.drop(['PassengerId', 'Pclass', 'Name', 'SibSp', 'Parch', 'Ticket', 'Fare', 'Cabin'], axis=1)
+    df = df.drop(['PassengerId', 'Name', 'SibSp', 'Parch', 'Ticket', 'Fare', 'Cabin'], axis=1)
     return df
+
+
+def explore():
+    training_data_file = os.path.join(doc_path, "train.csv")
+    training_original_df = pandas.read_csv(training_data_file)
+    training_df = pre_processing(pandas.read_csv(training_data_file))
+
+    with pandas.option_context('display.max_rows', None):
+        print(training_original_df)
+
+    plot_correlation_map(training_df)
+    plt.show()
 
 
 def train():
@@ -128,9 +151,6 @@ def train():
 
     training_data_file = os.path.join(doc_path, "train.csv")
     training_df = pre_processing(pandas.read_csv(training_data_file))
-
-    '''with pandas.option_context('display.max_rows', None):
-        print(training_df)'''
 
     plot_correlation_map(training_df)
     plt.show()
@@ -243,23 +263,12 @@ def store_classifier(classifier, basename):
         json.dump(json_dict, f)
 
 
-def get_newest_submission_number():
-    """
-    Automagically detect the the current submission number by looking for a list of the .final files and finding the
-    highest submission #
-    """
-    max_id = -1
-    for f in os.listdir(submission_path):
-        filename, extension = os.path.splitext(os.path.basename(f))
-        if extension == ".final" and int(filename.split("_")[1]) > max_id:
-            max_id = int(filename.split("_")[1])
-
-    max_id = max_id + 1 if max_id != 0 else 1
-    return "submit_{0}".format(max_id)
-
-
 if __name__ == "__main__":
-    storage_basename = get_newest_submission_number()
+    explore()
+
+    '''
+    storage_basename = get_newest_submission_number(submission_path)
     best_classifier = train()
     evaluate(best_classifier.classifier, storage_basename)
     store_classifier(best_classifier, storage_basename)
+    '''
