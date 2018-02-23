@@ -12,7 +12,7 @@ from utils.filestuff import source_path
 from utils.misc import get_newest_submission_number
 
 # ie - human readable version of: wot Mark tried today
-NOTE = "Dummy encoded sex/port/category-age classifier with unknowns allowed"
+NOTE = "Dummy encoded sex/port/category-age/pclass classifier with unknowns allowed"
 
 pandas.set_option('display.width', 1000)
 
