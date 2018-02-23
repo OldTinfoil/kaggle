@@ -1,0 +1,1 @@
+{"classifier": "<class 'sklearn.svm.classes.SVC'>----linear", "accuracy": 0.9, "precision": 0.8918918918918919, "recall": 0.868421052631579, "f1": 0.88, "average_accuracy": 0.7924000000000008, "average_prediction": 0, "average_recall": 0.7059410520032987, "average_f1": 0.7205068317771576, "note": "Dummy encoded sex/port/category-age classifier with unknowns allowed"}

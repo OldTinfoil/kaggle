@@ -2,6 +2,7 @@ import pandas
 import os
 import pickle
 import json
+import random
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 from sklearn.svm import SVC
@@ -100,7 +101,7 @@ def port_categorisation(df):
     return df
 
 
-def port_categorisation(df):
+def class_categorisation(df):
     # Embarkation port
     df['Class_First'] = [1 if pclass == 1 else 0 for pclass in df['Pclass']]
     df['Class_Second'] = [1 if pclass == 2 else 0 for pclass in df['Pclass']]
@@ -124,6 +125,7 @@ def pre_processing(df):
     df = age_categorisation(df)
     df = port_categorisation(df)
     df = sex_categorisation(df)
+    df = class_categorisation(df)
 
     # Will definitely need to look into class next
 
@@ -175,7 +177,8 @@ def train():
                                                                                   training_df.Survived,
                                                                                   test_size=CROSS_VALIDATION_TEST_SIZE)
 
-            linear_svm_classifier = SVC(kernel=kernel).fit(x_training, y_training)
+            degree = random.randint(1, 5)
+            linear_svm_classifier = SVC(kernel=kernel, degree=degree).fit(x_training, y_training)
             linear_svm_classifier_predictions = linear_svm_classifier.predict(x_validation)
             '''print(linear_svm_classifier.score(training_features, training_survival),
                   linear_svm_classifier.score(validation_features, validation_survival))'''
@@ -205,13 +208,13 @@ def train():
         best_classifier_candidate.average_precision = precision_avg
         best_classifier_candidate.average_recall = recall_avg
         best_classifier_candidate.average_f1 = f1_avg
-        best_classifier_candidate.flavour = kernel
+        best_classifier_candidate.flavour = "polynomial ({0} degrees)".format(degree) if kernel == 'poly' else kernel
         best_classifier_candidate.note = NOTE
 
         classifiers.append(best_classifier_candidate)
 
     # Print out summary data, find the best of the candidates
-    print("Kernel", "f1")
+    #print("Kernel", "f1")
     print(classifiers[0].get_description(), classifiers[0].f1)
     best_svm_classifier = classifiers[0]
     for classifier in classifiers[1:]:
@@ -264,11 +267,11 @@ def store_classifier(classifier, basename):
 
 
 if __name__ == "__main__":
-    explore()
+    #explore()
 
-    '''
+
     storage_basename = get_newest_submission_number(submission_path)
     best_classifier = train()
     evaluate(best_classifier.classifier, storage_basename)
     store_classifier(best_classifier, storage_basename)
-    '''
+
