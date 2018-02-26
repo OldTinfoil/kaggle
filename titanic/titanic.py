@@ -1,13 +1,16 @@
-import pandas
+import json
 import os
 import pickle
-import json
 import random
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-from sklearn.svm import SVC
+
 import matplotlib.pyplot as plt
+import pandas
 import seaborn
+from sklearn.metrics import (accuracy_score, f1_score, precision_score,
+                             recall_score)
+from sklearn.model_selection import train_test_split
+from sklearn.svm import SVC
+
 from utils.filestuff import source_path
 from utils.misc import get_newest_submission_number
 
@@ -76,31 +79,60 @@ def age_categorisation(df):
     Sourced from https://en.wikipedia.org/wiki/Human_development_(biology)
     :return:
     """
+    df = df.copy()
 
-    df['Age_Infant'] = [1 if 0 <= age < 1 else 0 for age in df['Age']]
-    df['Age_Toddler'] = [1 if 1 <= age < 3 else 0 for age in df['Age']]
-    df['Age_Preschooler'] = [1 if 3 <= age < 5 else 0 for age in df['Age']]
-    df['Age_Child'] = [1 if 5 <= age < 10 else 0 for age in df['Age']]
-    df['Age_Preteen'] = [1 if 10 <= age < 13 else 0 for age in df['Age']]
-    df['Age_Teenager'] = [1 if 13 <= age < 20 else 0 for age in df['Age']]
-    df['Age_Adult'] = [1 if 20 <= age < 40 else 0 for age in df['Age']]
-    df['Age_Midlife'] = [1 if 40 <= age < 60 else 0 for age in df['Age']]
-    df['Age_Senior'] = [1 if 60 <= age < 1000 else 0 for age in df['Age']]
-    df['Age_Unknown'] = [0 if 0 <= age <= 1000 else 1 for age in df['Age']]
-    df = df.drop(['Age'], axis=1)
+    bins = [0, 1, 3, 5, 10, 13, 20, 40, 60, 200]
+    ages =[         
+        'Age_Infant',
+        'Age_Toddler',
+        'Age_Preschooler',
+        'Age_Child',
+        'Age_Preteen',
+        'Age_Teenager',
+        'Age_Adult',
+        'Age_Midlife',
+        'Age_Senior'
+    ]
+
+    df['undummied'] = pandas.cut(df.Age, bins=bins, labels=ages)
+    dummies = pandas.get_dummies(df.undummied)
+    dummies = dummies.fillna('Age_Unknown')
+    df = df.join(dummies)
+    df = df.drop(['Age', 'undummied'], axis=1)
     return df
 
 
+# I'm using pandas.get_dummies here, it's pretty fucking rad.
+# However, it can trick you out like a motherflipper.
+# See how I do dummies[['C', 'S', 'Q', 'U']] there? I'm assuming
+# that any data I pass in WILL HAVE C, S, Q, and U in the Embarked
+# column. If that turns out to not be true, this function will fail
+# with a KeyError.
+# A similar bug you can encounter, say that this function handles Q
+# being missing gracefully so it doesn't error out. When you pass
+# dataframes into a ML model you effectively convert them into numpy
+# arrays of a certain shape, let's say C*R. If one of your dfs 
+# (say train and test) have different C (number of columns) then it
+# will probably error out.
+# This is especially problematic if you then want to re-use the function
+# once you've trained your model for future predictions. You have to 
+# make sure that your function outputs future dataframes in a consistent
+# format.
+# There's ways to fix this, but they're a bit more complex so will leave
+# it for another day.
 def port_categorisation(df):
     # Embarkation port
-    df['Port_Cherbourg'] = [1 if port == "C" else 0 for port in df['Embarked']]
-    df['Port_Queenstown'] = [1 if port == "Q" else 0 for port in df['Embarked']]
-    df['Port_Southampton'] = [1 if port == "S" else 0 for port in df['Embarked']]
-    df['Port_Unknown'] = [1 if port not in ["C", "S", "Q"] else 0 for port in df['Embarked']]
+    df = df.copy()
+    
+    df['Embarked'] = df.Embarked.fillna('U')
+    dummies = pd.get_dummies(df.Embarked)
+    df[['Port_Cherbourg', 'Port_Southampton', 'Port_Queenstown', 'Port_Unknown']] = dummies[['C', 'S', 'Q', 'U']]
+    
     df = df.drop(['Embarked'], axis=1)
     return df
 
 
+# See port_categorisation for a similar implementation
 def class_categorisation(df):
     # Embarkation port
     df['Class_First'] = [1 if pclass == 1 else 0 for pclass in df['Pclass']]
@@ -110,7 +142,7 @@ def class_categorisation(df):
     df = df.drop(['Pclass'], axis=1)
     return df
 
-
+# See port_categorisation for a similar implementation
 def sex_categorisation(df):
     # Sex
     df['Sex_Male'] = [1 if sex == "male" else 0 for sex in df['Sex']]
@@ -128,6 +160,8 @@ def pre_processing(df):
     df = class_categorisation(df)
 
     # Will definitely need to look into class next
+    # Fizzy - yeeeeeeeeeeeees. You should look into
+    # Pipeline and FeatureUnion. They'll make you moist.
 
     # drop unused metrics (for now at least)
     df = df.drop(['PassengerId', 'Name', 'SibSp', 'Parch', 'Ticket', 'Fare', 'Cabin'], axis=1)
@@ -169,9 +203,20 @@ def train():
        as bad
     * Finally, pick the best classifier and use it.
     '''
+    # Fizzy - Look up RandomizedSearchCV and GridSearchCV to do a better search of which hyperparameters work best. 
+    # It'll pretty much replace this entire for loop
+    # They will ROCK YOUR SOCKS.
     for kernel in SVM_KERNELS:
         best_classifier_candidate = ClassifierAnalysis(None, "Bland", 0, 0, 0, 0, 0, 0, 0, 0)
         for _ in range(0, SHUFFLES):
+            # Fizzy - You'll find that there's generally three data splits:
+            # Training - Data you train a model on
+            # Testing - Data you use for testing a model during building the model.
+            # Validation - A separate dataset that is never used for training and testing. Once you are happy with your model 
+            # (and say you're delivering it to a customer) then you run the model against your validation data to validate
+            # and give an idea of your "final" performance.
+            # I only bring these up because you call your "test" set validation here, which is fine, but just
+            # so you know in case you see similar online.
             x_training, x_validation, y_training, y_validation = train_test_split(training_df.drop(['Survived'],
                                                                                                    axis=1),
                                                                                   training_df.Survived,
@@ -274,4 +319,3 @@ if __name__ == "__main__":
     best_classifier = train()
     evaluate(best_classifier.classifier, storage_basename)
     store_classifier(best_classifier, storage_basename)
-
